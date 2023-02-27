@@ -32,6 +32,8 @@ ffmpeg_options = {
     'options': '-vn'
 }
 
+bot.queue = []
+
 ytdl = youtube_dl.YoutubeDL(ytdl_format_options)
 
 class YTDLSource(discord.PCMVolumeTransformer):
@@ -39,7 +41,11 @@ class YTDLSource(discord.PCMVolumeTransformer):
         super().__init__(source, volume)
         self.data = data
         self.title = data.get('title')
-        self.url = ""
+        self.thumbnail = data.get('thumbnail')
+        self.url = data.get('webpage_url')
+        self.uploader = data.get('uploader')
+        self.uploader_url = data.get('uploader_url')
+        print(self.title)
 
     @classmethod
     async def from_url(cls, url, *, loop=None, stream=False):
@@ -49,8 +55,8 @@ class YTDLSource(discord.PCMVolumeTransformer):
             # take first item from a playlist
             data = data['entries'][0]
         filename = data['title'] if stream else ytdl.prepare_filename(data)
-        return filename
-    
+        return data
+
 @bot.command(name='join', help='Tells the bot to join the voice channel')
 async def join(ctx):
     if not ctx.message.author.voice:
@@ -71,14 +77,22 @@ async def leave(ctx):
 @bot.command(name='play', help='To play song')
 async def play(ctx,url):
     await ctx.invoke(bot.get_command('join'))
+    bot.queue.append(url)
     try :
         server = ctx.message.guild
         voice_channel = server.voice_client
 
         async with ctx.typing():
-            filename = await YTDLSource.from_url(url, loop=bot.loop)
-            voice_channel.play(discord.FFmpegPCMAudio(executable="ffmpeg.exe", source=filename))
-        await ctx.send('**Now playing:** {}'.format(filename))
+            data = await YTDLSource.from_url(url, loop=bot.loop)
+            filename = data['title']
+            uploader = data['uploader']
+            thumb = data['thumbnail']
+            voice_channel.play(discord.FFmpegPCMAudio(executable="ffmpeg/ffmpeg.exe", source=filename))
+        embed=discord.Embed(title="Now Playing", url=url, color=0xff0000)
+        embed.set_thumbnail(url=thumb)
+        embed.add_field(name=filename, value=uploader, inline=False)
+        await ctx.send(embed=embed)
+        await ctx.send(bot.queue)
     except:
         await ctx.send("The bot is not connected to a voice channel.")
 
@@ -88,6 +102,7 @@ async def pause(ctx):
     voice_client = ctx.message.guild.voice_client
     if voice_client.is_playing():
         await voice_client.pause()
+        await ctx.send("Paused song")
     else:
         await ctx.send("The bot is not playing anything at the moment.")
     
@@ -96,6 +111,7 @@ async def resume(ctx):
     voice_client = ctx.message.guild.voice_client
     if voice_client.is_paused():
         await voice_client.resume()
+        await ctx.send("Resumed song")
     else:
         await ctx.send("The bot was not playing anything before this. Use play command")
 
@@ -104,6 +120,7 @@ async def stop(ctx):
     voice_client = ctx.message.guild.voice_client
     if voice_client.is_playing():
         await voice_client.stop()
+        await ctx.send("Stopped song")
     else:
         await ctx.send("The bot is not playing anything at the moment.")
 
